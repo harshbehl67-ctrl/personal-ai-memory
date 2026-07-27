@@ -1,0 +1,180 @@
+import { Project } from '../types';
+
+export const projects: Project[] = [
+  {
+    id: 'proj-001',
+    name: 'Personal AI Memory System',
+    description: 'Building a privacy-first AI memory layer that persists context across conversations, email, calendar, and documents. Core product for the company.',
+    status: 'active',
+    stakeholders: ['person-001', 'person-002', 'person-003', 'person-006'],
+    goals: [
+      'Ship Memory Inbox feature by Aug 25 (Sprint 4)',
+      'Achieve < 200ms retrieval latency at p95',
+      'Pass HIPAA compliance audit for enterprise tier',
+      'Reach 1,000 beta users by September 30',
+      'Zero knowledge architecture for sensitive memories',
+    ],
+    recentUpdates: [
+      {
+        date: '2026-07-22T14:00:00Z',
+        summary: 'Architecture decision: PostgreSQL with pgvector selected over Weaviate. Simpler operational model, team already has Postgres expertise.',
+        type: 'decision',
+      },
+      {
+        date: '2026-07-20T11:00:00Z',
+        summary: 'Architecture spec v1.3 finalized. Hybrid retrieval (BM25 + vector) approved as the core search strategy.',
+        type: 'milestone',
+      },
+      {
+        date: '2026-07-19T09:00:00Z',
+        summary: 'Memory classification model v0.2 achieves 89% accuracy on the test set. Better than the 85% target.',
+        type: 'milestone',
+      },
+      {
+        date: '2026-07-15T14:00:00Z',
+        summary: 'Risk identified: on-device embedding may not meet latency targets on older hardware. Exploring hybrid cloud/on-device approach.',
+        type: 'risk',
+      },
+      {
+        date: '2026-07-10T09:00:00Z',
+        summary: 'Q3 roadmap published. Sprint 4 (Aug 25 – Sep 5) assigned to Memory Inbox feature.',
+        type: 'update',
+      },
+    ],
+    importantDecisions: ['mem-002', 'mem-005', 'mem-011', 'mem-012'],
+    linkedDocuments: [
+      { id: 'ldoc-001', title: 'Architecture Spec v1.3', date: '2026-07-20T11:00:00Z' },
+      { id: 'ldoc-002', title: 'Q3 Roadmap — Personal AI Memory Product', date: '2026-07-10T09:00:00Z' },
+      { id: 'ldoc-003', title: 'Memory Classification Model Evaluation Report v0.2', date: '2026-07-19T11:00:00Z' },
+      { id: 'ldoc-004', title: 'Privacy & Security Design Principles', date: '2026-07-05T10:00:00Z' },
+    ],
+    risks: [
+      'On-device embedding latency on older hardware (investigating hybrid approach)',
+      'Regulatory uncertainty around AI memory storage (monitoring EU AI Act)',
+      'Memory classification accuracy may degrade for domain-specific jargon',
+    ],
+    openQuestions: [
+      'Should we support memory export in GDPR-compliant format at launch or V2?',
+      'How do we handle memory conflicts when two sources contradict each other?',
+      'What is the right memory expiration policy for temporary context?',
+      'Do we need a separate memory tier for highly sensitive medical data?',
+    ],
+    nextActions: [
+      { id: 'na-001', title: 'Complete Memory Inbox UI wireframes', owner: 'Sarah Kim', dueDate: '2026-07-30T00:00:00Z' },
+      { id: 'na-002', title: 'Implement pgvector schema migrations', owner: 'Jordan Lee', dueDate: '2026-07-31T00:00:00Z' },
+      { id: 'na-003', title: 'Write integration tests for memory classification pipeline', owner: 'Mei Zhang', dueDate: '2026-08-05T00:00:00Z' },
+      { id: 'na-004', title: 'Draft enterprise privacy policy v1', owner: 'Me', dueDate: '2026-08-02T00:00:00Z' },
+    ],
+    launchTarget: '2026-09-30T00:00:00Z',
+    tags: ['core-product', 'ai', 'memory', 'privacy'],
+    createdAt: '2026-06-01T00:00:00Z',
+    updatedAt: '2026-07-22T14:30:00Z',
+    color: '#7C3AED',
+  },
+  {
+    id: 'proj-002',
+    name: 'Project Aurora',
+    description: 'Next-generation consumer AI assistant platform with persistent personalization. Partner project with an external design agency.',
+    status: 'active',
+    stakeholders: ['person-001', 'person-002', 'person-005'],
+    goals: [
+      'Launch public beta by September 15, 2026',
+      'Build onboarding flow with < 5 minute time-to-value',
+      'Deliver 3 flagship integrations: Gmail, Calendar, Notion',
+      'Hit NPS score of 60+ in beta cohort',
+    ],
+    recentUpdates: [
+      {
+        date: '2026-07-24T09:15:00Z',
+        summary: 'Proposal for client portal integration pending delivery to Alex by Friday, July 26.',
+        type: 'update',
+      },
+      {
+        date: '2026-07-22T14:00:00Z',
+        summary: 'Design review completed. New component system approved. Sarah to finalize Figma library by July 30.',
+        type: 'milestone',
+      },
+      {
+        date: '2026-07-15T08:00:00Z',
+        summary: 'September 15 launch date officially locked in by leadership.',
+        type: 'decision',
+      },
+    ],
+    importantDecisions: ['mem-004', 'mem-006'],
+    linkedDocuments: [
+      { id: 'ldoc-005', title: 'Aurora Design System v2.0', date: '2026-07-20T10:00:00Z' },
+      { id: 'ldoc-006', title: 'Aurora Beta Launch Plan', date: '2026-07-15T09:00:00Z' },
+      { id: 'ldoc-007', title: 'Client Portal Integration Spec', date: '2026-07-18T14:00:00Z' },
+    ],
+    risks: [
+      'Tight September 15 deadline leaves little buffer for QA',
+      'Client portal proposal still pending — blocks integration planning',
+      'Design agency bandwidth may be stretched across two concurrent projects',
+    ],
+    openQuestions: [
+      'Which CRM systems do we support at launch vs. in V1.1?',
+      'What are the fallback behaviors when the AI memory layer is offline?',
+      'Is the September 15 date moveable if QA reveals critical issues?',
+    ],
+    nextActions: [
+      { id: 'na-005', title: 'Send client portal proposal to Alex', owner: 'Me', dueDate: '2026-07-26T00:00:00Z' },
+      { id: 'na-006', title: 'Finalize Aurora Figma component library', owner: 'Sarah Kim', dueDate: '2026-07-30T00:00:00Z' },
+      { id: 'na-007', title: 'Set up CI/CD pipeline for beta environment', owner: 'Jordan Lee', dueDate: '2026-08-01T00:00:00Z' },
+    ],
+    launchTarget: '2026-09-15T00:00:00Z',
+    tags: ['aurora', 'consumer', 'ai-assistant', 'beta'],
+    createdAt: '2026-05-15T00:00:00Z',
+    updatedAt: '2026-07-24T09:20:00Z',
+    color: '#3B82F6',
+  },
+  {
+    id: 'proj-003',
+    name: 'Apex Health Client Portal',
+    description: 'Custom AI memory portal for Apex Health Systems with full HIPAA compliance, zero-retention architecture, and medical context memory.',
+    status: 'planning',
+    stakeholders: ['person-004'],
+    goals: [
+      'Deliver HIPAA-compliant memory architecture',
+      'Zero data retention for sensitive patient context',
+      'Integrate with Epic EHR system',
+      'Deliver pilot by Q4 2026',
+    ],
+    recentUpdates: [
+      {
+        date: '2026-07-23T11:30:00Z',
+        summary: 'Onboarding call completed. Dr. Chen confirmed HIPAA + zero-retention requirements. Legacy CRM integration flagged as a potential 2–3 week delay.',
+        type: 'update',
+      },
+      {
+        date: '2026-07-20T09:00:00Z',
+        summary: 'NDA and compliance checklist signed by both parties.',
+        type: 'milestone',
+      },
+    ],
+    importantDecisions: ['mem-007', 'mem-014'],
+    linkedDocuments: [
+      { id: 'ldoc-008', title: 'Apex Health NDA — Signed', date: '2026-07-20T09:00:00Z' },
+      { id: 'ldoc-009', title: 'HIPAA Compliance Checklist v1', date: '2026-07-20T09:00:00Z' },
+    ],
+    risks: [
+      'Legacy CRM integration may add 2–3 weeks to timeline',
+      'Epic EHR API access subject to approval — 4–6 week timeline',
+      'Zero-retention requirement conflicts with persistent memory core product feature',
+    ],
+    openQuestions: [
+      'How do we implement zero-retention while still providing useful memory features?',
+      'What is the scope of Epic EHR integration for the pilot?',
+      'Does the pilot include end-user training or just technical delivery?',
+    ],
+    nextActions: [
+      { id: 'na-008', title: 'Design zero-retention memory architecture', owner: 'Jordan Lee', dueDate: '2026-08-10T00:00:00Z' },
+      { id: 'na-009', title: 'Submit Epic EHR API access request', owner: 'Me', dueDate: '2026-07-31T00:00:00Z' },
+      { id: 'na-010', title: 'Draft Statement of Work for Apex pilot', owner: 'Me', dueDate: '2026-08-05T00:00:00Z' },
+    ],
+    launchTarget: '2026-12-01T00:00:00Z',
+    tags: ['enterprise', 'healthcare', 'hipaa', 'client'],
+    createdAt: '2026-07-15T00:00:00Z',
+    updatedAt: '2026-07-23T11:30:00Z',
+    color: '#10B981',
+  },
+];
