@@ -5,7 +5,10 @@ import { supabase } from '@/lib/supabase';
 export async function POST(req: Request) {
   try {
     const { prompt } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY || '';
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "GEMINI_API_KEY environment variable is missing." }, { status: 500 });
+    }
     const ai = new GoogleGenAI({ apiKey });
 
     // Call Gemini API
