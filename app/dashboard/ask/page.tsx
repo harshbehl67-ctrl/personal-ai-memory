@@ -41,7 +41,34 @@ export default function AskMemoryPage() {
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
-    await sleep(1200 + Math.random() * 800);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.content && !data.error) {
+          const assistantMsg: ChatMessageType = {
+            id: makeId(),
+            role: 'assistant',
+            content: data.content,
+            timestamp: new Date().toISOString(),
+            confidenceScore: data.confidenceScore || 95,
+            isFactBased: data.isFactBased ?? true,
+            citations: [],
+          };
+          setMessages(prev => [...prev, assistantMsg]);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      // Fallback to local demo response matching below
+    }
+
+    await sleep(1000 + Math.random() * 500);
 
     // Find matching response or generate generic one
     const matched = Object.entries(chatResponses).find(([key]) =>
