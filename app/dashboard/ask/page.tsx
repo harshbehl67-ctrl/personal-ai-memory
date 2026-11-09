@@ -1,35 +1,58 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Sparkles, ArrowRight, MessageSquare } from 'lucide-react';
-import { ChatMessage as ChatMessageType, Memory } from '@/lib/types';
-import { chatResponses, suggestedQuestions } from '@/lib/demo-data/chat-responses';
+import { ChatMessage as ChatMessageType } from '@/lib/types';
+import { useMemories, useStats } from '@/lib/client';
 import ChatMessage from '@/components/chat/ChatMessage';
 import ChatInput from '@/components/chat/ChatInput';
-import { sleep } from '@/lib/utils';
+import EmptyState from '@/components/ui/empty-state';
 
 let msgId = 1;
 function makeId() { return `msg-${msgId++}-${Date.now()}`; }
+
+type ChatPayload = {
+  content?: string;
+  relatedMemories?: ChatMessageType['relatedMemories'];
+  citations?: ChatMessageType['citations'];
+  confidenceScore?: number;
+  isFactBased?: boolean;
+  inferenceWarning?: string;
+  error?: string;
+};
 
 export default function AskMemoryPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hello! I'm your Personal AI Memory assistant. I have access to your emails, meetings, documents, and browsing history to give you accurate, cited answers.\n\nTry asking me something, or pick one of the suggested questions below.",
+      content: "I answer only from the memories you have captured. Ask me something, or save something new first and I will use it.",
       timestamp: new Date().toISOString(),
-      confidenceScore: 100,
-      isFactBased: true,
       citations: [],
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recent = useMemories({ limit: 50 });
+  const stats = useStats();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const suggestions = useMemo(() => {
+    const tags = new Map<string, number>();
+    for (const memory of recent.data ?? []) {
+      for (const tag of memory.tags) tags.set(tag, (tags.get(tag) ?? 0) + 1);
+    }
+    const top = [...tags.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const questions = top.map(([tag]) => `What do I know about ${tag}?`);
+    if ((stats.data?.byType.commitment ?? 0) > 0) questions.push('What have I promised that is still open?');
+    if ((stats.data?.pendingInbox ?? 0) > 0) questions.push('What is waiting for me in the inbox?');
+    return questions.slice(0, 4);
+  }, [recent.data, stats.data]);
 
   const handleSend = async (text: string) => {
     const userMsg: ChatMessageType = {
@@ -47,61 +70,50 @@ export default function AskMemoryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.content && !data.error) {
-          const assistantMsg: ChatMessageType = {
+      const payload = (await res.json()) as ChatPayload;
+
+      const assistantMsg: ChatMessageType = res.ok && payload.content
+        ? {
             id: makeId(),
             role: 'assistant',
-            content: data.content,
+            content: payload.content,
             timestamp: new Date().toISOString(),
-            confidenceScore: data.confidenceScore || 95,
-            isFactBased: data.isFactBased ?? true,
+            confidenceScore: payload.confidenceScore ?? 0,
+            isFactBased: payload.isFactBased ?? false,
+            relatedMemories: payload.relatedMemories ?? [],
+            citations: payload.citations ?? [],
+            inferenceWarning: payload.inferenceWarning,
+          }
+        : {
+            id: makeId(),
+            role: 'assistant',
+            content: payload.error
+              ? `The memory service could not answer: ${payload.error}`
+              : 'The memory service returned no answer.',
+            timestamp: new Date().toISOString(),
+            confidenceScore: 0,
+            isFactBased: false,
             citations: [],
+            inferenceWarning: 'Nothing was stored or retrieved for this question.',
           };
-          setMessages(prev => [...prev, assistantMsg]);
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch (e) {
-      // Fallback to local demo response matching below
+
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        id: makeId(),
+        role: 'assistant',
+        content: error instanceof Error ? `Request failed: ${error.message}` : 'Request failed.',
+        timestamp: new Date().toISOString(),
+        confidenceScore: 0,
+        isFactBased: false,
+        citations: [],
+      }]);
+    } finally {
+      setIsLoading(false);
     }
-
-    await sleep(1000 + Math.random() * 500);
-
-    // Find matching response or generate generic one
-    const matched = Object.entries(chatResponses).find(([key]) =>
-      text.toLowerCase().includes(key.toLowerCase().slice(0, 20)) ||
-      key.toLowerCase().includes(text.toLowerCase().slice(0, 20))
-    );
-
-    const responseData = matched
-      ? matched[1]
-      : {
-          content: `I searched your memory for "${text}" but couldn't find a direct match in my demo data. In the full version, I'd search across all your connected sources — emails, meetings, documents, and browser history — to give you a cited answer.\n\nTry one of the suggested questions to see the full experience.`,
-          confidenceScore: 45,
-          isFactBased: false,
-          relatedMemories: [] as Memory[],
-          citations: [],
-          inferenceWarning: "This is a demo response — the full AI would search your actual connected sources.",
-        };
-
-    const assistantMsg: ChatMessageType = {
-      id: makeId(),
-      role: 'assistant',
-      content: responseData.content,
-      timestamp: new Date().toISOString(),
-      confidenceScore: responseData.confidenceScore,
-      isFactBased: responseData.isFactBased,
-      relatedMemories: responseData.relatedMemories as Memory[],
-      citations: responseData.citations,
-      inferenceWarning: responseData.inferenceWarning,
-    };
-
-    setMessages(prev => [...prev, assistantMsg]);
-    setIsLoading(false);
   };
+
+  const hasMemories = (stats.data?.total ?? 0) > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -114,13 +126,17 @@ export default function AskMemoryPage() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-white">Ask Memory</h1>
-              <p className="text-xs text-slate-500">AI answers with citations from your connected sources</p>
+              <p className="text-xs text-slate-500">
+                Grounded answers from the {stats.data?.total ?? 0} memories you have captured
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
-            5 sources active
-          </div>
+          <Link
+            href="/dashboard/capture"
+            className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1.5"
+          >
+            Capture something <ArrowRight size={12} />
+          </Link>
         </div>
       </div>
 
@@ -140,7 +156,6 @@ export default function AskMemoryPage() {
             ))}
           </AnimatePresence>
 
-          {/* Loading indicator */}
           {isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -152,7 +167,7 @@ export default function AskMemoryPage() {
               </div>
               <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-sm bg-white/[0.025] border border-white/[0.06]">
                 <Sparkles size={12} className="text-violet-400 animate-pulse" />
-                <span className="text-xs text-slate-500">Searching your memory...</span>
+                <span className="text-xs text-slate-500">Searching your memories...</span>
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
                     <motion.div
@@ -170,28 +185,36 @@ export default function AskMemoryPage() {
         </div>
       </div>
 
-      {/* Suggested questions (only shown when at start) */}
+      {/* Suggestions or first-run prompt */}
       {messages.length <= 1 && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-6 pb-4"
-        >
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="px-6 pb-4">
           <div className="max-w-4xl mx-auto">
-            <p className="text-[11px] text-slate-600 uppercase tracking-wide font-medium mb-3">Try asking...</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {suggestedQuestions.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleSend(q)}
-                  className="group flex items-center gap-3 px-4 py-3 rounded-xl text-left text-xs text-slate-400 bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-violet-500/30 hover:text-slate-200 transition-all duration-200"
-                >
-                  <MessageSquare size={13} className="text-slate-600 group-hover:text-violet-400 shrink-0" />
-                  {q}
-                  <ArrowRight size={11} className="text-slate-700 group-hover:text-violet-400 ml-auto shrink-0" />
-                </button>
-              ))}
-            </div>
+            {hasMemories && suggestions.length > 0 ? (
+              <>
+                <p className="text-[11px] text-slate-600 uppercase tracking-wide font-medium mb-3">
+                  Try asking about what you stored
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {suggestions.map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => handleSend(q)}
+                      className="group flex items-center gap-3 px-4 py-3 rounded-xl text-left text-xs text-slate-400 bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-violet-500/30 hover:text-slate-200 transition-all duration-200"
+                    >
+                      <MessageSquare size={13} className="text-slate-600 group-hover:text-violet-400 shrink-0" />
+                      {q}
+                      <ArrowRight size={11} className="text-slate-700 group-hover:text-violet-400 ml-auto shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <EmptyState
+                title="Your memory store is empty"
+                hint="Nothing here is simulated — the assistant can only answer from memories you capture yourself."
+                actionLabel="Capture your first memory"
+              />
+            )}
           </div>
         </motion.div>
       )}

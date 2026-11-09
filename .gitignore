@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local SQLite memory store (personal data — never commit)
+/data/
+
 # production
 /build
 

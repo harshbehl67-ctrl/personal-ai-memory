@@ -7,18 +7,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, MessageSquare, Clock, FolderKanban,
   Users, CheckSquare, Inbox, Database, Shield,
-  ChevronLeft, ChevronRight, Brain, Sparkles, Bell
+  ChevronLeft, ChevronRight, Brain, Sparkles, Plus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCommitments, useStats } from '@/lib/client';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/capture', label: 'Capture', icon: Plus },
   { href: '/dashboard/ask', label: 'Ask Memory', icon: MessageSquare, badge: 'AI' },
   { href: '/dashboard/timeline', label: 'Timeline', icon: Clock },
   { href: '/dashboard/projects', label: 'Projects', icon: FolderKanban },
   { href: '/dashboard/people', label: 'People', icon: Users },
-  { href: '/dashboard/commitments', label: 'Commitments', icon: CheckSquare, badge: '3' },
-  { href: '/dashboard/inbox', label: 'Memory Inbox', icon: Inbox, badge: '6' },
+  { href: '/dashboard/commitments', label: 'Commitments', icon: CheckSquare, countKey: 'commitments' as const },
+  { href: '/dashboard/inbox', label: 'Memory Inbox', icon: Inbox, countKey: 'inbox' as const },
   { href: '/dashboard/sources', label: 'Sources', icon: Database },
   { href: '/dashboard/settings', label: 'Privacy & Settings', icon: Shield },
 ];
@@ -26,6 +28,18 @@ const navItems = [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const { data: stats } = useStats();
+  const { data: commitments } = useCommitments();
+
+  const openCommitments = (commitments ?? []).filter(
+    (commitment) => commitment.status !== 'completed' && commitment.status !== 'cancelled'
+  ).length;
+
+  const counts: Record<'commitments' | 'inbox', number> = {
+    commitments: openCommitments,
+    inbox: stats?.pendingInbox ?? 0,
+  };
+  const health = stats?.verifiedShare ?? 0;
 
   return (
     <motion.aside
@@ -96,16 +110,20 @@ export default function Sidebar() {
                     </motion.span>
                   )}
                 </AnimatePresence>
-                {!collapsed && item.badge && (
-                  <span className={cn(
-                    'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                    item.badge === 'AI'
-                      ? 'bg-violet-500/20 text-violet-300'
-                      : 'bg-amber-500/20 text-amber-300'
-                  )}>
-                    {item.badge}
-                  </span>
-                )}
+                {!collapsed && (() => {
+                  const count = item.countKey ? counts[item.countKey] : 0;
+                  if (!item.badge && count === 0) return null;
+                  return (
+                    <span className={cn(
+                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                      item.badge === 'AI'
+                        ? 'bg-violet-500/20 text-violet-300'
+                        : 'bg-amber-500/20 text-amber-300'
+                    )}>
+                      {item.badge ?? count}
+                    </span>
+                  );
+                })()}
               </motion.div>
             </Link>
           );
@@ -126,17 +144,19 @@ export default function Sidebar() {
                 <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                 <span className="text-xs font-semibold text-violet-300">Memory Health</span>
               </div>
-              <span className="text-xs font-bold text-emerald-400">87%</span>
+              <span className="text-xs font-bold text-emerald-400">{health}%</span>
             </div>
             <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: '87%' }}
+                animate={{ width: `${health}%` }}
                 transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
                 className="h-full bg-gradient-to-r from-violet-500 to-emerald-400 rounded-full"
               />
             </div>
-            <p className="text-[10px] text-slate-500 mt-1.5">15 memories saved this week</p>
+            <p className="text-[10px] text-slate-500 mt-1.5">
+              {stats ? `${stats.total} memories stored · ${stats.addedThisWeek} added this week` : 'Loading memory stats…'}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

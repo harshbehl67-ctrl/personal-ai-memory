@@ -43,6 +43,7 @@ export interface Memory {
   createdAt: string;
   updatedAt: string;
   expiresAt?: string;
+  sourceType: SourceType;
   connectedPeople: string[]; // person IDs
   connectedProjects: string[]; // project IDs
   citations: SourceCitation[];
@@ -51,122 +52,16 @@ export interface Memory {
   tags: string[];
 }
 
-export interface InboxSuggestion {
-  id: string;
-  suggestedStatement: string;
-  type: MemoryType;
-  importanceScore: ImportanceLevel;
-  confidenceScore: number;
-  sensitivityLevel: SensitivityLevel;
-  whyAiWantsToSave: string;
-  citations: SourceCitation[];
-  connectedPeople: string[];
-  connectedProjects: string[];
-  createdAt: string;
-  status: 'pending' | 'approved' | 'rejected' | 'edited';
-}
-
-export interface Person {
-  id: string;
-  name: string;
-  role: string;
-  organization: string;
-  email?: string;
-  avatarInitials: string;
-  avatarColor: string;
-  relationshipContext: string;
-  lastContacted: string;
-  sharedProjects: string[];
-  commitments: string[]; // commitment IDs
-  notes: string;
-  rememberedPreferences: string[];
-  recentCommunication: {
-    type: SourceType;
-    summary: string;
-    date: string;
-  }[];
-  citations: SourceCitation[];
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  description: string;
-  status: 'active' | 'paused' | 'completed' | 'planning';
-  stakeholders: string[]; // person IDs
-  goals: string[];
-  recentUpdates: {
-    date: string;
-    summary: string;
-    type: 'decision' | 'update' | 'milestone' | 'risk';
-  }[];
-  importantDecisions: string[]; // memory IDs
-  linkedDocuments: {
-    id: string;
-    title: string;
-    url?: string;
-    date: string;
-  }[];
-  risks: string[];
-  openQuestions: string[];
-  nextActions: {
-    id: string;
-    title: string;
-    owner?: string;
-    dueDate?: string;
-  }[];
-  launchTarget?: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-  color: string;
-}
-
 export interface Commitment {
   id: string;
   title: string;
   description?: string;
-  owner: string; // person name or "Me"
-  ownerPersonId?: string;
+  owner: string;
   dueDate?: string;
   status: CommitmentStatus;
-  relatedProject?: string; // project ID
-  relatedProjectName?: string;
-  evidence: SourceCitation[];
-  reminderEnabled: boolean;
-  reminderDate?: string;
-  tags: string[];
+  relatedProject?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface TimelineEvent {
-  id: string;
-  type: SourceType;
-  title: string;
-  summary: string;
-  date: string;
-  connectedPeople: string[];
-  connectedProjects: string[];
-  memoryCreated: boolean;
-  memoryId?: string;
-  tags: string[];
-  importance: ImportanceLevel;
-  isExpanded?: boolean;
-}
-
-export interface DataSource {
-  id: string;
-  type: SourceType;
-  name: string;
-  description: string;
-  icon: string;
-  status: 'connected' | 'disconnected' | 'syncing' | 'error';
-  lastSync?: string;
-  itemCount: number;
-  privacyLevel: 'full' | 'limited' | 'minimal';
-  enabled: boolean;
-  permissions: string[];
 }
 
 export interface ChatMessage {
@@ -180,18 +75,4 @@ export interface ChatMessage {
   relatedMemories?: Memory[];
   citations?: SourceCitation[];
   inferenceWarning?: string;
-}
-
-export interface DailyBrief {
-  date: string;
-  greeting: string;
-  topInsights: string[];
-  upcomingMeetings: {
-    title: string;
-    time: string;
-    attendees: string[];
-    prepNotes: string;
-  }[];
-  pendingCommitments: number;
-  memoryHealthScore: number;
 }

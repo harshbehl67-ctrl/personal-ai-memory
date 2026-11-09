@@ -1,34 +1,43 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
-import { supabase } from '@/lib/supabase';
+import { generateMemoryAnswer } from '@/lib/ai';
+import { searchMemoriesDetailed } from '@/lib/repo';
 
 export async function POST(req: Request) {
   try {
     const { prompt } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "GEMINI_API_KEY environment variable is missing." }, { status: 500 });
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return NextResponse.json({ error: 'A non-empty prompt is required.' }, { status: 400 });
     }
-    const ai = new GoogleGenAI({ apiKey });
 
-    // Call Gemini API
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: "You are a Personal AI Memory assistant. Answer concisely based on context.",
-      }
-    });
+    const matches = searchMemoriesDetailed(prompt, 8);
+    const memories = matches.map((match) => match.memory);
+    const context = matches.length
+      ? matches
+          .map((match, i) => `[${i + 1}] (${match.memory.type}, ${match.memory.confidenceScore}% confidence, matched: ${match.matchedTerms.join(', ')}) ${match.memory.statement}`)
+          .join('\n')
+      : 'None found.';
 
-    const reply = response.text || "No response generated";
+    const reply = await generateMemoryAnswer(
+      `Stored memories:\n${context}\n\nQuestion: ${prompt.trim()}`
+    );
+
+    const confidenceScore = memories.length
+      ? Math.round(memories.reduce((sum, m) => sum + m.confidenceScore, 0) / memories.length)
+      : 0;
 
     return NextResponse.json({
       content: reply,
-      confidenceScore: 95,
-      isFactBased: true,
+      relatedMemories: memories,
+      citations: memories.flatMap((m) => m.citations),
+      confidenceScore,
+      isFactBased: memories.length > 0,
+      inferenceWarning: memories.length === 0
+        ? 'No stored memories matched this question, so the answer is not grounded in your data.'
+        : undefined,
       timestamp: new Date().toISOString()
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to generate memory AI response" }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate memory AI response';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

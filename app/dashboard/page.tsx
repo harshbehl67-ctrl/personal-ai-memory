@@ -1,91 +1,172 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
-  Brain, Sparkles, Clock, CheckSquare, AlertTriangle,
-  Calendar, Zap, TrendingUp, ArrowRight, MessageSquare,
-  Users, FolderKanban, Inbox, Database, ChevronRight,
-  MoreHorizontal, Star
+  Brain, Clock, CheckSquare, Inbox, AlertTriangle, TrendingUp,
+  ChevronRight, Plus, MessageSquare, ShieldCheck, Database, Sparkles,
 } from 'lucide-react';
-import { memories } from '@/lib/demo-data/memories';
-import { commitments } from '@/lib/demo-data/commitments';
-import { people } from '@/lib/demo-data/people';
-import { timelineEvents } from '@/lib/demo-data/timeline';
-import { formatRelativeTime, formatDate, memoryTypeConfig } from '@/lib/utils';
+import type { Commitment } from '@/lib/types';
+import { cn, formatDate, sourceTypeConfig } from '@/lib/utils';
+import { useMemories, useCommitments, useStats, deleteMemory } from '@/lib/client';
 import MemoryCard from '@/components/memory/MemoryCard';
+import EmptyState from '@/components/ui/empty-state';
 
-const stats = [
-  { label: 'Memories Saved', value: '247', change: '+15 this week', icon: Brain, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-  { label: 'Open Commitments', value: '10', change: '3 overdue', icon: CheckSquare, color: 'text-amber-400', bg: 'bg-amber-500/10', urgent: true },
-  { label: 'Sources Active', value: '5', change: 'All synced', icon: Database, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  { label: 'Memory Health', value: '87%', change: '+3% this week', icon: TrendingUp, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-];
+// ---- Small presentational helpers (module scope, no state) ----
 
-const upcomingMeetings = [
-  { title: 'Engineering Standup', time: '10:00 AM', attendees: ['Jordan Lee', 'Mei Zhang'], project: 'Personal AI Memory' },
-  { title: 'Product Sync — Aurora', time: '5:00 PM', attendees: ['Alex Chen', 'Sarah Kim'], project: 'Project Aurora', hasBrief: true },
-  { title: 'Client Call — Apex Health', time: '11:00 AM', date: 'Tomorrow', attendees: ['Dr. Priya Chen'], project: 'Apex Health Portal', hasBrief: true, urgent: true },
-];
+function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('animate-pulse rounded-xl bg-white/[0.05]', className)} />;
+}
+
+function ErrorNote({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3">
+      <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
+      <p className="text-xs text-red-300 leading-relaxed">{message}</p>
+    </div>
+  );
+}
+
+function SectionError({ label, message }: { label: string; message: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium text-red-400/80 uppercase tracking-wide mb-1.5">{label}</p>
+      <ErrorNote message={message} />
+    </div>
+  );
+}
+
+// Overdue is computed in the view from dueDate vs today (not trusted from stored status).
+function makeIsOverdue() {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return (c: Commitment): boolean => {
+    if (c.status === 'completed' || c.status === 'cancelled') return false;
+    if (!c.dueDate) return false;
+    return new Date(c.dueDate).getTime() < startOfToday.getTime();
+  };
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export default function DashboardPage() {
-  const [deletedMemories, setDeletedMemories] = useState<string[]>([]);
-  const recentMemories = memories.filter(m => !deletedMemories.includes(m.id)).slice(0, 3);
-  const overdueCommitments = commitments.filter(c => c.status === 'overdue');
+  const statsR = useStats();
+  const recentR = useMemories({ limit: 3 });
+  const commitR = useCommitments();
+
+  const stats = statsR.data;
+  const commitments = commitR.data ?? [];
+  const isOverdue = makeIsOverdue();
+
+  // Real, derived counts
+  const overdueCount = commitments.filter(isOverdue).length;
+  const openCommitments = commitments
+    .filter((c) => c.status !== 'completed' && c.status !== 'cancelled')
+    .sort((a, b) => {
+      const at = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY;
+      const bt = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
+      return at - bt;
+    })
+    .slice(0, 4);
+
+  const sources = stats ? Object.entries(stats.bySource) : [];
+
+  const statCards = stats
+    ? [
+        { label: 'Memories Saved', value: String(stats.total), icon: Brain, color: 'text-violet-400', bg: 'bg-violet-500/10', sub: 'In your long-term memory' },
+        { label: 'Added This Week', value: String(stats.addedThisWeek), icon: Clock, color: 'text-blue-400', bg: 'bg-blue-500/10', sub: 'New in the last 7 days' },
+        { label: 'Pending In Inbox', value: String(stats.pendingInbox), icon: Inbox, color: 'text-amber-400', bg: 'bg-amber-500/10', sub: 'Awaiting your review', urgent: stats.pendingInbox > 0 },
+        { label: 'Verified Share', value: `${stats.verifiedShare}%`, icon: ShieldCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10', sub: 'Backed by source citations' },
+      ]
+    : [];
+
+  async function handleDelete(id: string) {
+    // Fire the real delete, then refresh the list either way so the view
+    // always reflects the server (a failed delete simply leaves the row).
+    try {
+      await deleteMemory(id);
+    } finally {
+      recentR.reload();
+    }
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-7xl">
-      {/* Welcome header */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-start justify-between"
+        className="flex items-start justify-between gap-4"
       >
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Good evening 👋</h1>
-          <p className="text-slate-400 text-sm">Here's what your memory system has been tracking for you today.</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>
+          <p className="text-slate-400 text-sm">Here is what your memory system actually holds right now.</p>
         </div>
-        <Link
-          href="/dashboard/ask"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-500 text-white text-sm font-medium hover:shadow-lg hover:shadow-violet-500/25 transition-all hover:scale-[1.02]"
-        >
-          <MessageSquare size={15} />
-          Ask Memory
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/capture"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-500 text-white text-sm font-medium hover:shadow-lg hover:shadow-violet-500/25 transition-all hover:scale-[1.02]"
+          >
+            <Plus size={15} />
+            Capture
+          </Link>
+          <Link
+            href="/dashboard/ask"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.10] bg-white/[0.03] text-slate-200 text-sm font-medium hover:bg-white/[0.06] transition-all"
+          >
+            <MessageSquare size={15} />
+            Ask Memory
+          </Link>
+        </div>
       </motion.div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, i) => {
-          const Icon = stat.icon;
-          return (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07 }}
-              className="glass glass-hover rounded-2xl p-5"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-9 h-9 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                  <Icon size={17} className={stat.color} />
+      {statsR.error ? (
+        <ErrorNote message={`Could not load stats: ${statsR.error}`} />
+      ) : statsR.loading || !stats ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="glass rounded-2xl p-5">
+              <Skeleton className="w-9 h-9 rounded-xl mb-3" />
+              <Skeleton className="h-7 w-16 mb-2" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {statCards.map((stat, i) => {
+            const Icon = stat.icon;
+            return (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.07 }}
+                className="glass glass-hover rounded-2xl p-5"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', stat.bg)}>
+                    <Icon size={17} className={stat.color} />
+                  </div>
+                  {stat.urgent && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 font-medium">
+                      review
+                    </span>
+                  )}
                 </div>
-                {stat.urgent && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 font-medium">urgent</span>
-                )}
-              </div>
-              <p className="text-2xl font-bold text-white mb-0.5">{stat.value}</p>
-              <p className="text-xs text-slate-500">{stat.label}</p>
-              <p className={`text-[11px] mt-1 font-medium ${stat.urgent ? 'text-amber-400' : 'text-emerald-400'}`}>{stat.change}</p>
-            </motion.div>
-          );
-        })}
-      </div>
+                <p className="text-2xl font-bold text-white mb-0.5">{stat.value}</p>
+                <p className="text-xs text-slate-500">{stat.label}</p>
+                <p className="text-[11px] mt-1 text-slate-600">{stat.sub}</p>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Daily Brief */}
+        {/* Needs your attention */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -94,37 +175,78 @@ export default function DashboardPage() {
         >
           <div className="absolute inset-0 bg-gradient-to-br from-violet-500/[0.05] to-transparent pointer-events-none" />
           <div className="relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Sparkles size={16} className="text-violet-400" />
-                <h2 className="text-sm font-semibold text-white">Daily Brief</h2>
-              </div>
-              <span className="text-[10px] text-slate-600 bg-white/[0.04] px-2 py-1 rounded-lg border border-white/[0.06]">
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </span>
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles size={16} className="text-violet-400" />
+              <h2 className="text-sm font-semibold text-white">Needs your attention</h2>
             </div>
 
-            <div className="space-y-3">
-              {/* Alert */}
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-500/[0.08] border border-amber-500/20">
-                <AlertTriangle size={15} className="text-amber-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-amber-300">Overdue: Client portal proposal for Alex</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Was due Friday. Alex has sent a follow-up email. This is blocking Aurora planning.</p>
-                </div>
+            {statsR.error ? (
+              <SectionError label="Stats unavailable" message={statsR.error} />
+            ) : commitR.error ? (
+              <SectionError label="Commitments unavailable" message={commitR.error} />
+            ) : statsR.loading || commitR.loading || !stats ? (
+              <div className="space-y-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
               </div>
+            ) : (() => {
+              const items = [
+                stats.pendingInbox > 0 && {
+                  icon: Inbox, tone: 'amber', href: '/dashboard/inbox',
+                  text: `${plural(stats.pendingInbox, 'memory is', 'memories are')} awaiting review in your inbox`,
+                },
+                overdueCount > 0 && {
+                  icon: AlertTriangle, tone: 'red', href: '/dashboard/commitments',
+                  text: `${plural(overdueCount, 'commitment is', 'commitments are')} past their due date`,
+                },
+                stats.addedThisWeek > 0 && {
+                  icon: Brain, tone: 'violet', href: '/dashboard/timeline',
+                  text: `${plural(stats.addedThisWeek, 'memory was', 'memories were')} added in the last 7 days`,
+                },
+              ].filter(Boolean) as { icon: typeof Inbox; tone: string; href: string; text: string }[];
 
-              {[
-                { icon: '📅', text: 'Product Sync with Alex at 5pm — Aurora sprint review + commitment follow-up. Prepare metrics.', type: 'meeting' },
-                { icon: '🧠', text: '6 new memories are waiting for your review in the Memory Inbox.', type: 'memory' },
-                { icon: '📋', text: 'Epic EHR API access request for Apex Health is due July 31 — submit today to stay on track.', type: 'commitment' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  <p className="text-sm text-slate-300 leading-relaxed">{item.text}</p>
+              if (items.length === 0) {
+                return (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20">
+                    <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
+                    <p className="text-sm text-slate-300">Nothing pending — your memory system has no inbox items or overdue commitments right now.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {items.map((item, i) => {
+                    const Icon = item.icon;
+                    const tone = item.tone;
+                    return (
+                      <Link
+                        key={i}
+                        href={item.href}
+                        className={cn(
+                          'group flex items-center gap-3 p-3 rounded-xl border transition-colors',
+                          tone === 'red'
+                            ? 'bg-red-500/[0.06] border-red-500/20 hover:border-red-500/35'
+                            : tone === 'amber'
+                            ? 'bg-amber-500/[0.07] border-amber-500/20 hover:border-amber-500/35'
+                            : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12]',
+                        )}
+                      >
+                        <Icon
+                          size={15}
+                          className={cn(
+                            'shrink-0',
+                            tone === 'red' ? 'text-red-400' : tone === 'amber' ? 'text-amber-400' : 'text-violet-400',
+                          )}
+                        />
+                        <p className="text-sm text-slate-300 leading-relaxed flex-1">{item.text}</p>
+                        <ChevronRight size={14} className="text-slate-600 group-hover:text-slate-300 transition-colors shrink-0" />
+                      </Link>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         </motion.div>
 
@@ -139,56 +261,83 @@ export default function DashboardPage() {
             <TrendingUp size={15} className="text-emerald-400" />
             <h2 className="text-sm font-semibold text-white">Memory Health</h2>
           </div>
-          <div className="text-center mb-5">
-            <div className="relative w-24 h-24 mx-auto mb-3">
-              <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-                <motion.circle
-                  cx="50" cy="50" r="40" fill="none"
-                  stroke="url(#healthGrad)" strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray="251.2"
-                  initial={{ strokeDashoffset: 251.2 }}
-                  animate={{ strokeDashoffset: 251.2 * (1 - 0.87) }}
-                  transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
-                />
-                <defs>
-                  <linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#7C3AED" />
-                    <stop offset="100%" stopColor="#10B981" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">87%</span>
-              </div>
-            </div>
-            <p className="text-xs text-slate-500">Excellent memory hygiene</p>
-          </div>
 
-          <div className="space-y-2.5">
-            {[
-              { label: 'Coverage', value: 92, color: 'bg-emerald-500' },
-              { label: 'Freshness', value: 85, color: 'bg-blue-500' },
-              { label: 'Confidence', value: 88, color: 'bg-violet-500' },
-              { label: 'Citation rate', value: 79, color: 'bg-amber-500' },
-            ].map((item) => (
-              <div key={item.label}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-500">{item.label}</span>
-                  <span className="text-slate-400 font-medium">{item.value}%</span>
+          {statsR.error ? (
+            <SectionError label="Stats unavailable" message={statsR.error} />
+          ) : statsR.loading || !stats ? (
+            <div className="flex flex-col items-center gap-4 py-2">
+              <Skeleton className="w-24 h-24 rounded-full" />
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          ) : (
+            <>
+              <div className="text-center mb-5">
+                <div className="relative w-24 h-24 mx-auto mb-3">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                    <motion.circle
+                      cx="50" cy="50" r="40" fill="none"
+                      stroke="url(#healthGrad)" strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray="251.2"
+                      initial={{ strokeDashoffset: 251.2 }}
+                      animate={{ strokeDashoffset: 251.2 * (1 - stats.verifiedShare / 100) }}
+                      transition={{ duration: 1.2, delay: 0.4, ease: 'easeOut' }}
+                    />
+                    <defs>
+                      <linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#7C3AED" />
+                        <stop offset="100%" stopColor="#10B981" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-white">{stats.verifiedShare}%</span>
+                  </div>
                 </div>
-                <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${item.value}%` }}
-                    transition={{ duration: 0.8, delay: 0.5 }}
-                    className={`h-full ${item.color} rounded-full`}
-                  />
+                <p className="text-xs text-slate-500">Verified share of your memories</p>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs py-1.5 border-b border-white/[0.06]">
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <Brain size={13} className="text-violet-400" /> Total memories
+                  </span>
+                  <span className="text-slate-200 font-semibold">{stats.total}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs py-1.5 border-b border-white/[0.06]">
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <Database size={13} className="text-emerald-400" /> Distinct sources
+                  </span>
+                  <span className="text-slate-200 font-semibold">{sources.length}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs py-1.5">
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <Inbox size={13} className="text-amber-400" /> Pending in inbox
+                  </span>
+                  <span className="text-slate-200 font-semibold">{stats.pendingInbox}</span>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {sources.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-600 mb-2">Sources present</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sources.map(([key, count]) => (
+                      <span
+                        key={key}
+                        className="text-[11px] px-2 py-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-400"
+                      >
+                        {sourceTypeConfig[key as keyof typeof sourceTypeConfig]?.label ?? key} · {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </motion.div>
       </div>
 
@@ -210,105 +359,97 @@ export default function DashboardPage() {
               View all <ChevronRight size={12} />
             </Link>
           </div>
-          <div className="space-y-3">
-            {recentMemories.map((mem) => (
-              <MemoryCard
-                key={mem.id}
-                memory={mem}
-                compact
-                onDelete={(id) => setDeletedMemories(prev => [...prev, id])}
-              />
-            ))}
-          </div>
+
+          {recentR.error ? (
+            <ErrorNote message={recentR.error} />
+          ) : recentR.loading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : (recentR.data?.length ?? 0) === 0 ? (
+            <EmptyState
+              title="No memories yet"
+              hint="Capture what you have learned and it will show up here."
+              actionHref="/dashboard/capture"
+              actionLabel="Capture a memory"
+            />
+          ) : (
+            <div className="space-y-3">
+              {recentR.data!.map((mem) => (
+                <MemoryCard key={mem.id} memory={mem} compact onDelete={handleDelete} />
+              ))}
+            </div>
+          )}
         </motion.div>
 
-        {/* Upcoming + Commitments */}
-        <div className="space-y-5">
-          {/* Upcoming meetings */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.45 }}
-            className="glass rounded-2xl p-5"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Calendar size={15} className="text-blue-400" />
-                <h2 className="text-sm font-semibold text-white">Upcoming Meetings</h2>
-              </div>
+        {/* Open Commitments */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="glass rounded-2xl p-5"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={15} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-white">Open Commitments</h2>
+              {overdueCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25">
+                  {overdueCount} overdue
+                </span>
+              )}
             </div>
-            <div className="space-y-2.5">
-              {upcomingMeetings.map((meeting, i) => (
-                <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                  meeting.urgent ? 'bg-amber-500/[0.06] border-amber-500/20' : 'bg-white/[0.02] border-white/[0.06]'
-                }`}>
-                  <div className={`shrink-0 mt-0.5 w-2 h-2 rounded-full ${meeting.urgent ? 'bg-amber-400' : 'bg-blue-400'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-medium text-slate-200 truncate">{meeting.title}</p>
-                      <span className="text-[10px] text-slate-500 shrink-0">{meeting.date || 'Today'} · {meeting.time}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{meeting.attendees.join(', ')}</p>
-                    {meeting.hasBrief && (
-                      <button className="text-[10px] text-violet-400 hover:text-violet-300 mt-1 flex items-center gap-1">
-                        <Brain size={9} /> View AI brief
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+            <Link href="/dashboard/commitments" className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors">
+              All <ChevronRight size={12} />
+            </Link>
+          </div>
 
-          {/* Open commitments */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="glass rounded-2xl p-5"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <CheckSquare size={15} className="text-amber-400" />
-                <h2 className="text-sm font-semibold text-white">Open Commitments</h2>
-                {overdueCommitments.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25">
-                    {overdueCommitments.length} overdue
-                  </span>
-                )}
-              </div>
-              <Link href="/dashboard/commitments" className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors">
-                All <ChevronRight size={12} />
-              </Link>
-            </div>
+          {commitR.error ? (
+            <ErrorNote message={commitR.error} />
+          ) : commitR.loading ? (
             <div className="space-y-2">
-              {commitments.slice(0, 4).map((commit) => (
-                <div key={commit.id} className={`flex items-start gap-3 p-3 rounded-xl border ${
-                  commit.status === 'overdue' ? 'bg-red-500/[0.06] border-red-500/20' :
-                  commit.status === 'in_progress' ? 'bg-blue-500/[0.04] border-blue-500/15' :
-                  'bg-white/[0.02] border-white/[0.06]'
-                }`}>
-                  <div className={`shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${
-                    commit.status === 'overdue' ? 'bg-red-400' :
-                    commit.status === 'in_progress' ? 'bg-blue-400' :
-                    'bg-slate-600'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-200 leading-snug">{commit.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-slate-600">{commit.owner}</span>
-                      {commit.dueDate && (
-                        <span className={`text-[10px] font-medium ${commit.status === 'overdue' ? 'text-red-400' : 'text-slate-500'}`}>
-                          · {commit.status === 'overdue' ? '⚠️ ' : ''}{formatDate(commit.dueDate)}
-                        </span>
-                      )}
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </div>
+          ) : openCommitments.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">No open commitments right now.</p>
+          ) : (
+            <div className="space-y-2">
+              {openCommitments.map((commit) => {
+                const overdue = isOverdue(commit);
+                return (
+                  <div
+                    key={commit.id}
+                    className={cn(
+                      'flex items-start gap-3 p-3 rounded-xl border',
+                      overdue ? 'bg-red-500/[0.06] border-red-500/20' : 'bg-white/[0.02] border-white/[0.06]',
+                    )}
+                  >
+                    <div className={cn('shrink-0 mt-1 w-1.5 h-1.5 rounded-full', overdue ? 'bg-red-400' : 'bg-slate-600')} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-200 leading-snug">{commit.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {commit.owner && <span className="text-[10px] text-slate-600">{commit.owner}</span>}
+                        {commit.dueDate && (
+                          <span className={cn('text-[10px] font-medium', overdue ? 'text-red-400' : 'text-slate-500')}>
+                            {overdue ? 'Overdue · ' : 'Due '}
+                            {formatDate(commit.dueDate)}
+                          </span>
+                        )}
+                        {!commit.dueDate && (
+                          <span className="text-[10px] text-slate-600">No due date</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </motion.div>
-        </div>
+          )}
+        </motion.div>
       </div>
     </div>
   );

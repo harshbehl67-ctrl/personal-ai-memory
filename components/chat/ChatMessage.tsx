@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, User, AlertTriangle, ExternalLink, Edit2, Trash2, Eye, CheckCircle } from 'lucide-react';
+import { Brain, AlertTriangle, ExternalLink, Edit2, Trash2, CheckCircle } from 'lucide-react';
 import { ChatMessage as ChatMessageType, Memory } from '@/lib/types';
-import { formatTime, getConfidenceBg, getConfidenceColor } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
 import ConfidenceBadge from '@/components/memory/ConfidenceBadge';
-import { cn } from '@/lib/utils';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -43,16 +42,14 @@ export default function ChatMessage({ message, onEditMemory, onForgetMemory }: C
           {message.confidenceScore !== undefined && (
             <ConfidenceBadge score={message.confidenceScore} />
           )}
-          {!message.isFactBased && (
-            <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-              <AlertTriangle size={10} />
-              AI Inference
-            </span>
-          )}
-          {message.isFactBased && (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-              <CheckCircle size={10} />
-              Source Verified
+          {message.isFactBased !== undefined && (
+            <span className={cn(
+              'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border',
+              message.isFactBased
+                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                : 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+            )}>
+              {message.isFactBased ? (<><CheckCircle size={10} /> Source Verified</>) : (<><AlertTriangle size={10} /> AI Inference</>)}
             </span>
           )}
           <span className="text-[10px] text-slate-600 ml-auto">{formatTime(message.timestamp)}</span>

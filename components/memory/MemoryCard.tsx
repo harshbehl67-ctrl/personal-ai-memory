@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit2, Trash2, HelpCircle, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Edit2, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
 import { Memory } from '@/lib/types';
 import { memoryTypeConfig, sensitivityConfig, getConfidenceColor, getConfidenceBg, formatRelativeTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';

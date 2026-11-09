@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { cn, getConfidenceColor, getConfidenceBg } from '@/lib/utils';
 
 interface ConfidenceBadgeProps {
